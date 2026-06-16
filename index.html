@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>おいしさ研究 食品評価（VAS 0–100）</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 20px; background: #f5f7fa;
+    font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
+    color: #1a202c; line-height: 1.6;
+  }
+  .container { max-width: 680px; margin: 0 auto; }
+  header { background: #2c5282; color: #fff; padding: 16px 22px; border-radius: 12px; margin-bottom: 14px; }
+  header h1 { margin: 0 0 2px; font-size: 19px; }
+  header p { margin: 0; opacity: 0.85; font-size: 13px; }
+
+  .phase-tag {
+    display: inline-block; background: #4299e1; color: #fff;
+    padding: 3px 14px; border-radius: 4px; font-size: 14px; font-weight: bold; margin-bottom: 12px;
+  }
+  .food-name { font-size: 26px; font-weight: 800; color: #2c5282; }
+  .progress { height: 6px; background: #e2e8f0; border-radius: 3px; margin-bottom: 16px; overflow: hidden; }
+  .progress-bar { height: 100%; background: #4299e1; transition: width 0.3s; width: 0%; }
+
+  .card { background: #fff; padding: 20px 22px; border-radius: 12px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .q-label { font-size: 17px; font-weight: 700; }
+  .q-sub { font-size: 13px; color: #718096; font-weight: 400; }
+
+  /* VAS：素のライン（初期マーカーなし＝アンカリング回避）＋ 配置後に数値バブル表示 */
+  .vasline-wrap { padding: 26px 8px 4px; }
+  .vasline { position: relative; height: 50px; cursor: pointer; touch-action: none; }
+  .vasline-track { position: absolute; top: 50%; left: 0; right: 0; height: 2px; background: #4a5568; transform: translateY(-50%); }
+  .vasline-end { position: absolute; top: 50%; width: 2px; height: 18px; background: #4a5568; transform: translateY(-50%); }
+  .vasline-end.l { left: 0; } .vasline-end.r { right: 0; }
+  .vasline-mark { position: absolute; top: 50%; left: 0; width: 4px; height: 32px; background: #2c5282; border-radius: 2px; transform: translate(-50%, -50%); display: none; }
+  .vasline.answered .vasline-mark { display: block; }
+  .vasline-bubble {
+    position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 8px;
+    background: #2c5282; color: #fff; font-size: 14px; font-weight: 700; padding: 2px 9px; border-radius: 7px; white-space: nowrap;
+  }
+  .vasline-bubble::after { content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-top-color: #2c5282; }
+  .vas-labels { display: flex; justify-content: space-between; font-size: 13px; color: #4a5568; margin-top: 4px; }
+  .vas-hint { text-align: center; font-size: 12px; color: #cbd5e0; min-height: 16px; margin-top: 2px; }
+
+  .field { margin-bottom: 12px; }
+  .field label { font-weight: 600; display: block; margin-bottom: 6px; }
+  .field input { width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 16px; font-family: inherit; }
+
+  .actions { display: flex; gap: 12px; margin-top: 8px; }
+  button { flex: 1; padding: 16px; border: none; border-radius: 10px; font-size: 17px; font-weight: bold; cursor: pointer; }
+  .btn-primary { background: #2c5282; color: #fff; }
+  .btn-primary:disabled { background: #cbd5e0; cursor: not-allowed; }
+  .btn-secondary { background: #e2e8f0; color: #2d3748; }
+  .btn-back { flex: 0 0 96px; }
+
+  table.summary { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.summary th, table.summary td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: center; }
+  table.summary th { background: #2c5282; color: #fff; font-weight: 600; }
+  table.summary td.food { text-align: left; font-weight: 700; white-space: nowrap; }
+  .scroll-x { overflow-x: auto; }
+  pre { text-align: left; background: #1a202c; color: #cbd5e0; padding: 14px; border-radius: 8px; font-size: 11px; overflow: auto; max-height: 280px; }
+  textarea.copybox { width: 100%; height: 150px; margin-top: 10px; padding: 10px; border: 2px solid #cbd5e0; border-radius: 8px; font-family: monospace; font-size: 12px; }
+  .ios-note { background: #ebf8ff; border-left: 4px solid #4299e1; padding: 10px 12px; border-radius: 6px; font-size: 13px; color: #2c5282; text-align: left; margin-top: 10px; }
+  .warn { background: #fffbeb; border-left: 4px solid #f6ad55; padding: 12px 14px; border-radius: 6px; font-size: 14px; color: #744210; }
+  #abortBtn {
+    position: fixed; bottom: 14px; right: 14px; display: none;
+    width: auto; padding: 9px 16px; font-size: 13px; font-weight: 700;
+    background: #fff; color: #a0aec0; border: 1px solid #e2e8f0; border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12); z-index: 50; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>食品評価（VAS 0–100）</h1>
+    <p>好き度・美味しさ度・味わい深さ度・次々に食べたい度・特別感</p>
+  </header>
+  <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+  <div id="app"></div>
+</div>
+<button id="abortBtn" onclick="abortExp()">中止して保存</button>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  設定 ── 食品リストはここを編集するだけ
+// ════════════════════════════════════════════════════════════
+const CONFIG = {
+  evaluatorRequired: false,   // 評価者IDの入力を必須にするなら true
+  randomizeOrder: false,      // 提示順をランダム化（カウンターバランス）するなら true
+  foods: [
+    "寿司（にぎり）", "ローストビーフ", "天ぷら", "すき焼き", "ステーキ",
+    "ピザ・マルゲリータ", "パエリア", "エビフライ", "カプレーゼ", "アヒージョ",
+    "チーズフォンデュ", "麻婆豆腐", "親子丼", "八宝菜", "お好み焼き",
+    "回鍋肉", "餃子", "冷麺", "ビビンバ", "キーマカレー",
+    "青椒肉絲", "とんかつ", "串カツ", "焼き鳥", "タンドリーチキン",
+    "肉じゃが", "筑前煮", "茶碗蒸し", "クラムチャウダー", "ミネストローネ",
+  ],
+};
+
+// 評価5項目（0–100 VAS）── 好き=選好/価値ゲート ／ 美味しい・味わい深い=Like(快・高解像度) ／ 次々に食べたい=Want(むさぼり) ／ 特別感=価値・ハレ
+const ITEMS = [
+  { key: "suki",      label: "好き度", text: "どのくらい<strong>好き</strong>ですか",
+    labels: ["全く好きでない", "とても好き"] },
+  { key: "oishisa",   label: "美味しさ度", text: "どのくらい<strong>美味しい</strong>ですか",
+    labels: ["全く美味しくない", "とても美味しい"] },
+  { key: "ajiwai",    label: "味わい深さ度", text: "どのくらい<strong>味わい深い</strong>ですか",
+    labels: ["全く味わい深くない", "とても味わい深い"] },
+  { key: "tsugitsugi", label: "次々に食べたい度", text: "どのくらい<strong>次々に食べたい</strong>と思いますか",
+    labels: ["全く思わない", "とても次々に食べたい"] },
+  { key: "tokubetsu", label: "特別感を感じる度", text: "どのくらい<strong>特別感</strong>を感じますか",
+    labels: ["全く特別でない（日常的）", "とても特別"] },
+];
+
+// ════════════════════════════════════════════════════════════
+//  状態
+// ════════════════════════════════════════════════════════════
+let data = {
+  evaluator: "",
+  startedAtISO: new Date().toISOString(),
+  items: ITEMS.map(it => ({ key: it.key, label: it.label })),
+  foods: [],
+};
+let order = CONFIG.foods.map((_, i) => i);
+let screen = "start";
+let foodPos = 0;       // order 配列上の位置
+let touched = {};      // 現画面のVAS値（key -> 0..100）
+let pendingResume = null;
+
+const app = document.getElementById("app");
+const $ = id => document.getElementById(id);
+
+// ── 自動保存（途中で閉じても「続きから」再開できる）──────────
+const SKEY = "foodRatingSession_v4_30x5";
+function saveSession() { try { localStorage.setItem(SKEY, JSON.stringify({ data, order, foodPos })); } catch (_) {} }
+function clearSession() { try { localStorage.removeItem(SKEY); } catch (_) {} }
+
+// ── VAS生成 ───────────────────────────────────────────────
+function vasHtml(item) {
+  const id = "v_" + item.key;
+  return `<div class="card">
+    <div class="q-label">${item.label}</div>
+    <div class="q-sub">${item.text}</div>
+    <div class="vasline-wrap">
+      <div class="vasline" data-id="${id}">
+        <div class="vasline-track"></div>
+        <div class="vasline-end l"></div>
+        <div class="vasline-end r"></div>
+        <div class="vasline-mark" id="mark_${id}"><span class="vasline-bubble" id="bub_${id}">0</span></div>
+      </div>
+      <div class="vas-labels"><span>${item.labels[0]}</span><span>${item.labels[1]}</span></div>
+      <div class="vas-hint" id="hint_${id}">ラインをタップして印をつけてください（0〜100）</div>
+    </div>
+  </div>`;
+}
+function placeValue(id, v) {
+  v = Math.max(0, Math.min(100, v));
+  const rounded = Math.round(v);
+  touched[id] = rounded;
+  const line = document.querySelector(`.vasline[data-id="${id}"]`);
+  line.classList.add("answered");
+  $("mark_" + id).style.left = v + "%";
+  $("bub_" + id).textContent = rounded;
+  const hint = $("hint_" + id); if (hint) hint.textContent = "";
+  if (screen === "food") { commitTouched(); saveSession(); }  // 1タップごとに自動保存
+  updateNext();
+}
+function wireAllVas() {
+  document.querySelectorAll(".vasline:not([data-wired])").forEach(el => {
+    el.setAttribute("data-wired", "1");
+    const id = el.getAttribute("data-id");
+    const place = clientX => {
+      const r = el.getBoundingClientRect();
+      placeValue(id, (clientX - r.left) / r.width * 100);
+    };
+    el.addEventListener("pointerdown", e => { try { el.setPointerCapture(e.pointerId); } catch (_) {} place(e.clientX); });
+    el.addEventListener("pointermove", e => { if (el.hasPointerCapture && el.hasPointerCapture(e.pointerId)) place(e.clientX); });
+  });
+}
+function updateNext() {
+  const need = ITEMS.length;
+  const got = document.querySelectorAll(".vasline.answered").length;
+  const btn = $("nextBtn");
+  if (btn) btn.disabled = got < need;
+}
+
+// ── 描画 ───────────────────────────────────────────────────
+function render() {
+  touched = {};
+  setProgress();
+  const ab = $("abortBtn"); if (ab) ab.style.display = (screen === "food") ? "block" : "none";
+  if (screen === "start") renderStart();
+  else if (screen === "food") renderFood();
+  else if (screen === "done") renderDone();
+  wireAllVas();
+}
+function setProgress() {
+  let pct = 0;
+  if (screen === "start") pct = 0;
+  else if (screen === "food") pct = (foodPos / order.length) * 100;
+  else pct = 100;
+  $("progressBar").style.width = pct + "%";
+}
+
+// 開始 ----------------------------------------------------------
+function renderStart() {
+  let resumeHtml = "";
+  if (pendingResume) {
+    const done = pendingResume.data.foods.filter(f => ITEMS.every(it => f.ratings[it.key] !== undefined)).length;
+    resumeHtml = `<div class="card" style="border:2px solid #4299e1;">
+      <div class="q-label" style="margin-bottom:6px;">前回の続きが残っています</div>
+      <div class="q-sub" style="margin-bottom:12px;">評価済み ${done} / ${pendingResume.data.foods.length} 品（評価者: ${pendingResume.data.evaluator || "未入力"}）</div>
+      <div class="actions">
+        <button class="btn-primary" onclick="resumeExp()">続きから再開</button>
+        <button class="btn-secondary" onclick="discardResume()">最初から</button>
+      </div></div>`;
+  }
+  app.innerHTML = resumeHtml + `
+    <div class="card">
+      <div class="phase-tag">準備</div>
+      <div class="field">
+        <label>評価者ID${CONFIG.evaluatorRequired ? "（必須）" : "（任意）"}</label>
+        <input id="pid" placeholder="例: P01"
+          oninput="${CONFIG.evaluatorRequired ? "document.getElementById('startBtn').disabled=!this.value.trim()" : ""}">
+      </div>
+      <div class="q-sub">評価する食品（${CONFIG.foods.length}品）：${CONFIG.foods.join(" / ")}</div>
+      <div class="q-sub" style="margin-top:8px;">各食品について${ITEMS.length}項目を 0〜100 のラインで評価します。${CONFIG.randomizeOrder ? "提示順はランダム化されます。" : ""}<br>途中で「中止して保存」できます。閉じても自動保存され、次回「続きから再開」できます。</div>
+    </div>
+    <div class="actions">
+      <button class="btn-primary" id="startBtn" ${CONFIG.evaluatorRequired ? "disabled" : ""} onclick="startExp()">評価を開始</button>
+    </div>`;
+}
+function startExp() {
+  clearSession();
+  data = { evaluator: ($("pid").value || "").trim(), startedAtISO: new Date().toISOString(),
+           items: ITEMS.map(it => ({ key: it.key, label: it.label })), foods: [] };
+  order = CONFIG.foods.map((_, i) => i);
+  if (CONFIG.randomizeOrder) {
+    for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+  }
+  data.foods = CONFIG.foods.map((name, i) => ({ name, listIndex: i, ratings: {} }));
+  foodPos = 0; screen = "food"; render();
+}
+function resumeExp() {
+  data = pendingResume.data; order = pendingResume.order; foodPos = pendingResume.foodPos || 0;
+  pendingResume = null; screen = "food"; render();
+}
+function discardResume() { pendingResume = null; clearSession(); render(); }
+
+// 食品ループ ----------------------------------------------------
+function renderFood() {
+  const f = data.foods[order[foodPos]];
+  app.innerHTML = `
+    <div class="phase-tag">食品 ${foodPos + 1} / ${order.length}</div>
+    <div class="card" style="text-align:center;"><span class="food-name">${f.name}</span></div>
+    ${ITEMS.map(vasHtml).join("")}
+    <div class="actions">
+      ${foodPos > 0 ? `<button class="btn-secondary btn-back" onclick="prevFood()">前へ</button>` : ""}
+      <button class="btn-primary" id="nextBtn" disabled onclick="nextFood()">
+        ${foodPos === order.length - 1 ? "完了して結果へ" : "次の食品へ"}
+      </button>
+    </div>`;
+  ITEMS.forEach(it => { const id = "v_" + it.key; if (f.ratings[it.key] !== undefined) placeValue(id, f.ratings[it.key]); });
+}
+function commitTouched() {
+  const f = data.foods[order[foodPos]]; if (!f) return;
+  ITEMS.forEach(it => { const v = touched["v_" + it.key]; if (v !== undefined) f.ratings[it.key] = v; });
+}
+function nextFood() {
+  commitTouched(); saveSession();
+  if (foodPos < order.length - 1) { foodPos++; render(); }
+  else { data.finishedAtISO = new Date().toISOString(); screen = "done"; render(); }
+}
+function prevFood() { commitTouched(); saveSession(); if (foodPos > 0) { foodPos--; render(); } }
+
+// 途中中止 ------------------------------------------------------
+function abortExp() {
+  if (!confirm("ここまでの評価を保存して中止しますか？（未評価の食品は空欄になります）")) return;
+  commitTouched();
+  data.aborted = true;
+  data.abortInfo = { stoppedAtFood: foodPos + 1, foodName: (data.foods[order[foodPos]] || {}).name || "" };
+  data.finishedAtISO = new Date().toISOString();
+  screen = "done"; render();
+}
+
+// 完了・出力 ----------------------------------------------------
+function renderDone() {
+  clearSession();
+  const json = JSON.stringify(data, null, 2);
+  window._out = { wide: toWideCSV(), long: toLongCSV(), json, ev: data.evaluator };
+  const ratedCount = data.foods.filter(f => ITEMS.every(it => f.ratings[it.key] !== undefined)).length;
+  const head = `<tr><th>食品</th>${ITEMS.map(it => `<th>${it.label}</th>`).join("")}</tr>`;
+  const body = data.foods.map(f =>
+    `<tr><td class="food">${f.name}</td>${ITEMS.map(it => `<td>${f.ratings[it.key] ?? "—"}</td>`).join("")}</tr>`
+  ).join("");
+  const title = data.aborted
+    ? `<h2 style="color:#c53030; margin:4px 0 12px;">■ 途中で中止しました（ここまでを保存）</h2>`
+    : `<h2 style="color:#2c5282; margin:4px 0 12px;">✓ 評価が完了しました</h2>`;
+  app.innerHTML = `
+    <div class="card" style="text-align:center;">
+      ${title}
+      <p class="q-sub">評価者: ${data.evaluator || "（未入力）"} ／ 評価済み ${ratedCount} / ${data.foods.length} 品 × ${ITEMS.length}項目</p>
+      <div class="actions">
+        <button class="btn-primary" onclick="dl('wide')">CSV保存（横）</button>
+        <button class="btn-secondary" onclick="dl('long')">CSV保存（縦）</button>
+        <button class="btn-secondary" onclick="dl('json')">JSON保存</button>
+      </div>
+      <div class="actions">
+        <button class="btn-secondary" onclick="selectCsv('wide')">CSV（横）をコピー</button>
+        <button class="btn-secondary" onclick="selectCsv('long')">CSV（縦）をコピー</button>
+      </div>
+      <div class="ios-note">📱 iPhoneで「保存」が開くだけでうまくいかない場合は、上の<b>「コピー」</b>を押す → 下の枠を<b>長押し→全選択→コピー</b>して、メモ・メール・LINE等に貼り付けて回収してください。</div>
+      <textarea class="copybox" id="copyBox" readonly style="display:none;"></textarea>
+    </div>
+    <div class="card scroll-x"><table class="summary"><thead>${head}</thead><tbody>${body}</tbody></table></div>
+    <div class="card"><pre>${json}</pre></div>`;
+}
+function toWideCSV() {
+  const header = ["evaluator", "food_order", "food_name", ...ITEMS.map(it => it.label)].join(",");
+  const rows = data.foods.map(f =>
+    [csv(data.evaluator), f.listIndex + 1, csv(f.name), ...ITEMS.map(it => f.ratings[it.key] ?? "")].join(",")
+  );
+  return [header, ...rows].join("\n");
+}
+function toLongCSV() {
+  const header = "evaluator,food_order,food_name,item_key,item_label,value";
+  const rows = [];
+  data.foods.forEach(f => ITEMS.forEach(it =>
+    rows.push([csv(data.evaluator), f.listIndex + 1, csv(f.name), it.key, csv(it.label), f.ratings[it.key] ?? ""].join(","))
+  ));
+  return [header, ...rows].join("\n");
+}
+const csv = s => /[",\n]/.test(String(s)) ? `"${String(s).replace(/"/g, '""')}"` : String(s);
+function dl(type) {
+  const o = window._out;
+  const text = type === "json" ? o.json : (type === "wide" ? o.wide : o.long);
+  const blob = new Blob([type === "json" ? text : "﻿" + text],
+    { type: type === "json" ? "application/json" : "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `food_rating_${o.ev || "NA"}_${data.startedAtISO.replace(/[:.]/g, "-")}.${type === "json" ? "json" : "csv"}`;
+  a.click();
+}
+// iPhone向け：ダウンロードが効かない環境でも確実に回収できるコピー手段
+function selectCsv(type) {
+  const o = window._out;
+  const ta = $("copyBox");
+  ta.value = type === "wide" ? o.wide : o.long;
+  ta.style.display = "block";
+  ta.focus(); ta.select();
+  try { ta.setSelectionRange(0, ta.value.length); } catch (_) {}
+  let copied = false;
+  try { copied = document.execCommand("copy"); } catch (_) {}
+  if (navigator.clipboard) { navigator.clipboard.writeText(ta.value).then(() => {}, () => {}); }
+  alert(copied ? "コピーしました（メモ等に貼り付けてください）" : "下の枠を長押し→全選択→コピーしてください");
+}
+
+// ── 起動（前回の続きがあれば再開を提案）──────────────────────
+try {
+  const s = localStorage.getItem(SKEY);
+  if (s) {
+    const o = JSON.parse(s);
+    if (o && o.data && Array.isArray(o.data.foods) && o.data.foods.length === CONFIG.foods.length) pendingResume = o;
+    else localStorage.removeItem(SKEY);
+  }
+} catch (_) {}
+render();
+</script>
+</body>
+</html>
